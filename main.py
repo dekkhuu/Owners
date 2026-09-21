@@ -69,7 +69,7 @@ async def ping(interaction: discord.Interaction):
     latency = round(bot.latency * 1000)
 
     embed = discord.Embed(
-        title="Owens",
+        title="Owner",
         description=f"**Pong**\nĐộ trễ: `{latency}ms`",
         color=discord.Color.blurple()
     )
@@ -83,8 +83,8 @@ async def ping(interaction: discord.Interaction):
 )
 async def help_command(interaction: discord.Interaction):
     embed = discord.Embed(
-        title="Owens Help",
-        description="Danh sách các lệnh hiện có của Owens.",
+        title="Owner Help",
+        description="Danh sách các lệnh hiện có của Owner.",
         color=discord.Color.blurple()
     )
 
@@ -119,7 +119,7 @@ async def help_command(interaction: discord.Interaction):
         inline=False
     )
 
-    embed.set_footer(text="by ph.huyy • giờ VN")
+    embed.set_footer(text="by ph.huyy.")
     await interaction.response.send_message(embed=embed)
 
 
