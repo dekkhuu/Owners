@@ -696,8 +696,7 @@ class VerifyView(discord.ui.View):
                     success_embed = discord.Embed(
                         title="Chúc mừng bạn đã xác minh thành công",
                         description=(
-                            f"Chúc mừng bạn đã xác minh thành công của **Guid {guild.name}**\\n\\n"
-                            f"Hãy vào **{guild.name}** để nói chuyện cùng mọi người nhé!"
+                            f"Chúc mừng bạn đã xác minh thành công của **Guid {guild.name}, Hãy vào **{guild.name}** để nói chuyện cùng mọi người nhé!"
                         ),
                         color=discord.Color.green()
                     )
