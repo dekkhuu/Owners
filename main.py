@@ -1,6 +1,7 @@
 import os
 import json
 import datetime
+import secrets
 import discord
 from discord.ext import commands, tasks
 
@@ -206,6 +207,7 @@ async def on_message(message):
     if message.author.bot:
         return
 
+    # Nếu người gửi đang AFK và đã nhắn tin trở lại thì xóa trạng thái AFK.
     if hasattr(bot, "afk_users") and message.author.id in bot.afk_users:
         del bot.afk_users[message.author.id]
 
@@ -214,6 +216,33 @@ async def on_message(message):
             color=discord.Color.green()
         )
         await message.channel.send(embed=embed)
+
+    # Khi ai đó ping một người đang AFK, thông báo trạng thái AFK.
+    if hasattr(bot, "afk_users") and message.mentions:
+        notified_users = set()
+
+        for mentioned_user in message.mentions:
+            if mentioned_user.id in notified_users:
+                continue
+
+            if mentioned_user.id in bot.afk_users:
+                reason = bot.afk_users[mentioned_user.id]
+
+                embed = discord.Embed(
+                    description=(
+                        f"{mentioned_user.mention} đang ở chế độ AFK"
+                        f"\\n**Lý do:** {reason}"
+                    ),
+                    color=discord.Color.blurple()
+                )
+                embed.set_footer(text="by ph.huyy.")
+
+                try:
+                    await message.channel.send(embed=embed)
+                except discord.HTTPException:
+                    pass
+
+                notified_users.add(mentioned_user.id)
 
     await bot.process_commands(message)
 
@@ -556,6 +585,221 @@ async def birthday(
 @bot.event
 async def setup_hook():
     bot.add_view(BirthdayRegisterView())
+    bot.add_view(VerifyView())
+
+
+# =========================
+# VERIFY • BirthdayTime
+# =========================
+
+VERIFY_ROLE_ID = 1515041455805304953
+VERIFY_EMOJI = "<a:verify:1548178353859596320>"
+FAILED_EMOJI = "<a:failed:1548973085741547580>"
+
+# Lưu code đang có hiệu lực theo từng user.
+# Khi mở Modal mới, code cũ của user sẽ bị thay bằng code mới.
+bot.verify_codes = {}
+
+
+def generate_verify_code() -> str:
+    # 6 chữ số, dùng secrets để tạo mã khó đoán.
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+
+class VerifyView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Verify",
+        style=discord.ButtonStyle.success,
+        custom_id="birthdaytime_verify_button"
+    )
+    async def verify(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button
+    ):
+        # Mỗi lần bấm Verify sẽ tạo code mới cho riêng người đó.
+        code = generate_verify_code()
+        bot.verify_codes[interaction.user.id] = code
+
+        # Code chỉ hiển thị trong Modal/ephemeral, không gửi công khai.
+        # Người dùng cần nhập đúng code được hiển thị trên bảng.
+        class UserCodeModal(discord.ui.Modal, title="Verify • BirthdayTime"):
+            code_input = discord.ui.TextInput(
+                label=f"Code của bạn: {code}",
+                placeholder="Nhập code trên bảng",
+                min_length=6,
+                max_length=6,
+                required=True
+            )
+
+            async def on_submit(self, modal_interaction: discord.Interaction):
+                expected = bot.verify_codes.get(modal_interaction.user.id)
+                entered = str(self.code_input.value).strip()
+
+                if expected is None or entered != expected:
+                    await modal_interaction.response.send_message(
+                        f"{FAILED_EMOJI}Bạn chưa nhập đúng code trên bảng",
+                        ephemeral=True
+                    )
+                    return
+
+                guild = modal_interaction.guild
+                if guild is None:
+                    await modal_interaction.response.send_message(
+                        "❌ Lệnh này chỉ dùng trong server.",
+                        ephemeral=True
+                    )
+                    return
+
+                role = guild.get_role(VERIFY_ROLE_ID)
+                if role is None:
+                    await modal_interaction.response.send_message(
+                        "❌ Không tìm thấy role xác minh. Hãy kiểm tra ID role.",
+                        ephemeral=True
+                    )
+                    return
+
+                try:
+                    if role not in modal_interaction.user.roles:
+                        await modal_interaction.user.add_roles(
+                            role,
+                            reason="BirthdayTime verification"
+                        )
+                except discord.Forbidden:
+                    await modal_interaction.response.send_message(
+                        "❌ Bot không có quyền cấp role xác minh. "
+                        "Hãy kéo role bot cao hơn role xác minh.",
+                        ephemeral=True
+                    )
+                    return
+                except discord.HTTPException:
+                    await modal_interaction.response.send_message(
+                        "❌ Không thể cấp role xác minh lúc này.",
+                        ephemeral=True
+                    )
+                    return
+
+                bot.verify_codes.pop(modal_interaction.user.id, None)
+
+                # Thông báo xác minh thành công trong server.
+                await modal_interaction.response.send_message(
+                    f"{VERIFY_EMOJI}Bạn đã xác minh thành công",
+                    ephemeral=True
+                )
+
+                # Gửi riêng cho người dùng một Embed sau khi xác minh thành công.
+                try:
+                    success_embed = discord.Embed(
+                        title="Chúc mừng bạn đã xác minh thành công",
+                        description=(
+                            f"Chúc mừng bạn đã xác minh thành công của **Guid {guild.name}**\\n\\n"
+                            f"Hãy vào **{guild.name}** để nói chuyện cùng mọi người nhé!"
+                        ),
+                        color=discord.Color.green()
+                    )
+                    success_embed.set_footer(text="by ph.huyy.")
+                    await modal_interaction.user.send(embed=success_embed)
+                except (discord.Forbidden, discord.HTTPException):
+                    # Người dùng có thể đã tắt DM hoặc Discord đang lỗi tạm thời.
+                    pass
+
+        await interaction.response.send_modal(UserCodeModal())
+
+
+@bot.tree.command(
+    name="verify",
+    description="Thiết lập kênh và gửi bảng Verify • BirthdayTime",
+    guild=GUILD
+)
+@discord.app_commands.describe(
+    channel="Kênh sẽ hiển thị bảng Verify"
+)
+async def verify(
+    interaction: discord.Interaction,
+    channel: discord.TextChannel
+):
+    if not interaction.user.guild_permissions.administrator:
+        await interaction.response.send_message(
+            "❌ Bạn cần quyền Administrator.",
+            ephemeral=True
+        )
+        return
+
+    if interaction.guild is None:
+        await interaction.response.send_message(
+            "❌ Lệnh này chỉ dùng trong server.",
+            ephemeral=True
+        )
+        return
+
+    embed = discord.Embed(
+        title=f"{VERIFY_EMOJI}Verify • BirthdayTime",
+        description=(
+            "Hãy bấm nút `Verify` để được xác minh\n\n"
+            "Cách dùng: bấm `Verify`, sau đó nhập code được hiển thị trên bảng."
+        ),
+        color=discord.Color.blurple()
+    )
+    embed.set_footer(text="by ph.huyy.")
+
+    try:
+        await channel.send(embed=embed, view=VerifyView())
+    except discord.Forbidden:
+        await interaction.response.send_message(
+            f"❌ Bot không có quyền gửi tin nhắn tại {channel.mention}.",
+            ephemeral=True
+        )
+        return
+    except discord.HTTPException:
+        await interaction.response.send_message(
+            "❌ Không thể gửi bảng Verify vào kênh này.",
+            ephemeral=True
+        )
+        return
+
+    await interaction.response.send_message(
+        f"✅ Đã thiết lập bảng Verify tại {channel.mention}.",
+        ephemeral=True
+    )
+
+
+@bot.event
+async def on_member_join(member: discord.Member):
+    # Chỉ gửi DM cho thành viên mới trong server được phép.
+    if member.guild.id != ALLOWED_GUILD_ID:
+        return
+
+    VERIFY_LINK = "https://discord.gg/Nvmh4D7VCX"
+
+    try:
+        join_embed = discord.Embed(
+            title="Chào mừng bạn đến server!",
+            description=(
+                f"Bạn hãy vào kênh verify của **{member.guild.name}** để xác minh.\\n\\n"
+                f"🔗 [Vào kênh Verify]({VERIFY_LINK})"
+            ),
+            color=discord.Color.blurple()
+        )
+        join_embed.set_footer(text="by ph.huyy.")
+
+        # Nút bấm mở trực tiếp link Verify.
+        view = discord.ui.View()
+        view.add_item(
+            discord.ui.Button(
+                label="Vào Verify",
+                style=discord.ButtonStyle.link,
+                url=VERIFY_LINK
+            )
+        )
+
+        await member.send(embed=join_embed, view=view)
+    except (discord.Forbidden, discord.HTTPException):
+        # Người dùng có thể đã tắt DM.
+        pass
 
 
 @bot.event
