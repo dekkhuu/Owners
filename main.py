@@ -696,7 +696,7 @@ class VerifyView(discord.ui.View):
                     success_embed = discord.Embed(
                         title="Chúc mừng bạn đã xác minh thành công",
                         description=(
-                            f"Chúc mừng bạn đã xác minh thành công của **Guid {guild.name}, Hãy vào **{guild.name}** để nói chuyện cùng mọi người nhé!"
+                            f"Chúc mừng bạn đã xác minh thành công của **Guid {guild.name}, Hãy vào Server để nói chuyện cùng mọi người nhé!"
                         ),
                         color=discord.Color.green()
                     )
@@ -738,8 +738,7 @@ async def verify(
     embed = discord.Embed(
         title=f"{VERIFY_EMOJI}Verify • BirthdayTime",
         description=(
-            "Hãy bấm nút `Verify` để được xác minh\n\n"
-            "Cách dùng: bấm `Verify`, sau đó nhập code được hiển thị trên bảng."
+            "Cách dùng: bấm Verify, sau đó nhập code được hiển thị trên bảng."
         ),
         color=discord.Color.blurple()
     )
@@ -778,7 +777,7 @@ async def on_member_join(member: discord.Member):
         join_embed = discord.Embed(
             title="Chào mừng bạn đến server!",
             description=(
-                f"Bạn hãy vào kênh verify của **{member.guild.name}** để xác minh.\\n\\n"
+                f"Bạn hãy vào kênh verify của **{member.guild.name}** để xác minh."
                 f"🔗 [Vào kênh Verify]({VERIFY_LINK})"
             ),
             color=discord.Color.blurple()
