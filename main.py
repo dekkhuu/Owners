@@ -32,8 +32,8 @@ GUILD = discord.Object(id=ALLOWED_GUILD_ID)
 AUTO_MUTE_SECONDS = 24 * 60 * 60
 
 # Số tin nhắn tối đa trong khoảng thời gian ngắn trước khi coi là spam.
-SPAM_MESSAGE_LIMIT = 6
-SPAM_WINDOW_SECONDS = 8
+SPAM_MESSAGE_LIMIT = 3
+SPAM_WINDOW_SECONDS = 2
 
 # Các domain/link thường được dùng để quảng cáo, redirect hoặc link lạ.
 # Có thể bổ sung thêm domain vào danh sách này.
@@ -58,35 +58,35 @@ bot.muted_users = set()
 
 
 def contains_blocked_link(content: str) -> bool:
+    # Chặn tất cả URL được gửi trong server, không phân biệt domain.
     urls = re.findall(r"(?:https?://|www\.)[^\s<>()]+", content.lower())
-    for url in urls:
-        clean = re.sub(r"^[^a-z0-9]+|[^a-z0-9./:_-]+$", "", url)
-        domain_match = re.search(r"(?:https?://|www\.)([^/:?#\s]+)", clean)
-        if not domain_match:
-            continue
-        domain = domain_match.group(1).lower().removeprefix("www.")
-        if domain in BLOCKED_DOMAINS or any(domain.endswith("." + d) for d in BLOCKED_DOMAINS):
-            return True
-
-        # Chặn URL chứa từ khóa NSFW.
-        if any(keyword in clean for keyword in NSFW_KEYWORDS):
-            return True
-    return False
+    return bool(urls)
 
 
 def contains_nsfw_attachment(message: discord.Message) -> bool:
+    # Kiểm tra tên file và loại file có dấu hiệu đáng ngờ/18+.
+    suspicious_keywords = NSFW_KEYWORDS | {
+        "leak", "onlyfans"
+    }
+    suspicious_extensions = {
+        ".exe", ".bat", ".cmd", ".scr", ".msi", ".com", ".vbs",
+        ".js", ".jar", ".ps1", ".hta", ".apk", ".dll"
+    }
+
     for attachment in message.attachments:
         name = (attachment.filename or "").lower()
         content_type = (attachment.content_type or "").lower()
+        extension = Path(name).suffix
 
-        # Chặn tên file rõ ràng là NSFW.
-        if any(keyword in name for keyword in NSFW_KEYWORDS):
+        if any(keyword in name for keyword in suspicious_keywords):
             return True
 
-        # Nếu Discord đánh dấu attachment là image/video và tên có dấu hiệu NSFW.
-        if content_type.startswith(("image/", "video/")):
-            if any(keyword in name for keyword in NSFW_KEYWORDS):
-                return True
+        if extension in suspicious_extensions:
+            return True
+
+        if not content_type and extension in suspicious_extensions:
+            return True
+
     return False
 
 
@@ -293,6 +293,21 @@ async def unmute(ctx, member: discord.Member):
         color=discord.Color.green()
     )
     await ctx.send(embed=embed, delete_after=30)
+
+
+@bot.command(name="av")
+async def avatar(ctx, member: discord.Member = None):
+    """Xem avatar của người được tag; nếu không tag ai thì xem avatar của mình."""
+    member = member or ctx.author
+
+    embed = discord.Embed(
+        title=f"Avatar của {member.display_name}",
+        color=discord.Color.blurple()
+    )
+    embed.set_image(url=member.display_avatar.url)
+    embed.set_footer(text=f"ID: {member.id}")
+
+    await ctx.send(embed=embed)
 
 
 @bot.command(name="afk")
