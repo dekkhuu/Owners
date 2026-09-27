@@ -326,7 +326,11 @@ async def afk(ctx, *, reason: str = "AFK"):
         description=f"{target.mention} đang AFK: {reason}",
         color=discord.Color.blurple()
     )
-    await ctx.send(embed=embed, delete_after=30)
+    await ctx.send(
+        embed=embed,
+        delete_after=30,
+        allowed_mentions=discord.AllowedMentions(users=True)
+    )
 
 
 @bot.event
@@ -379,7 +383,11 @@ async def on_message(message):
             color=discord.Color.green()
         )
         try:
-            await message.channel.send(embed=embed)
+            await message.channel.send(
+                embed=embed,
+                allowed_mentions=discord.AllowedMentions(users=True),
+                delete_after=30
+            )
         except discord.HTTPException:
             pass
 
@@ -404,7 +412,10 @@ async def on_message(message):
                 embed.set_footer(text="by ph.huyy.")
 
                 try:
-                    await message.channel.send(embed=embed)
+                    await message.channel.send(
+                        embed=embed,
+                        allowed_mentions=discord.AllowedMentions(users=True)
+                    )
                 except discord.HTTPException:
                     pass
 
