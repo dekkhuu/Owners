@@ -1324,7 +1324,7 @@ async def ticket(
 
     embed = discord.Embed(
         description=(
-            ">Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.\n"
+            "> Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.\n"
             "Vui lòng chọn loại giao dịch bên dưới để mở Ticket.\n"
             "Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch."
         ),
@@ -1553,7 +1553,7 @@ async def verify(
     embed = discord.Embed(
         title="Verify • BirthdayTime",
         description=(
-            ">Hãy bấm nút \"Verify\" để được xác minh.\n"
+            "> Hãy bấm nút `Verify` để được xác minh.\n"
             "Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn."
         ),
         color=discord.Color.blue()
