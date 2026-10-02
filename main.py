@@ -86,7 +86,7 @@ GORE_KEYWORDS = {
 
 SUSPICIOUS_FILE_EXTENSIONS = {
     ".exe", ".bat", ".cmd", ".scr", ".msi", ".com", ".vbs",
-    ".js", ".jar", ".ps1", ".hta", ".apk", ".dll",
+    ".js", ".jar", ".ps1", ".hta", ".apk", ".dll", ".vn",
 }
 
 # Từ khóa thường xuất hiện trong tên file/URL NSFW.
@@ -1324,9 +1324,9 @@ async def ticket(
 
     embed = discord.Embed(
         description=(
-            "`Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.`\n"
-            "`Vui lòng chọn loại giao dịch bên dưới để mở Ticket.`\n"
-            "`Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch.`"
+            ">Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.\n"
+            "Vui lòng chọn loại giao dịch bên dưới để mở Ticket.\n"
+            "Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch."
         ),
         color=discord.Color.blue()
     )
@@ -1553,8 +1553,8 @@ async def verify(
     embed = discord.Embed(
         title="Verify • BirthdayTime",
         description=(
-            "`Hãy bấm nút \"Verify\" để được xác minh.\n`"
-            "`Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn.`"
+            ">Hãy bấm nút \"Verify\" để được xác minh.\n"
+            "Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn."
         ),
         color=discord.Color.blue()
     )
