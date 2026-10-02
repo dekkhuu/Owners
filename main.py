@@ -315,7 +315,7 @@ async def help_command(interaction: discord.Interaction):
         name="Thiết lập",
         value=(
             "`/start` — Tạo các kênh thống kê server\n"
-            "`/birthday setup` — Thiết lập sinh nhật\n"
+            "`/birthday` — Thiết lập sinh nhật\n"
             "`/boost` — Thiết lập thông báo Boost"
         ),
         inline=False
@@ -1140,7 +1140,7 @@ async def create_ticket(interaction: discord.Interaction, ticket_type: str, tick
 
     ticket_embed = discord.Embed(
         description=(
-            f"**Người tạo**: {interaction.user.mention}\n"
+            f"**@Người tạo**: {interaction.user.mention}\n"
             f"**Loại giao dịch**: {ticket_type}\n"
             f"**Trạng thái**: Chờ tiếp nhận\n"
             f"**Nhân viên phụ trách**: Chưa có"
@@ -1152,7 +1152,7 @@ async def create_ticket(interaction: discord.Interaction, ticket_type: str, tick
         description=(
             f"**Người tạo**: {interaction.user.mention}\n"
             f"**Nội dùng Ticket**: {ticket_content}\n\n"
-            "Staff có thể sử dụng các nút bên dưới để xử lý Ticket này."
+            "**Staff có thể sử dụng các nút bên dưới để xử lý Ticket này.**"
         ),
         color=discord.Color.blue()
     )
@@ -1328,9 +1328,9 @@ async def ticket(
 
     embed = discord.Embed(
         description=(
-            "Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.\n"
-            "Vui lòng chọn loại giao dịch bên dưới để mở Ticket.\n"
-            "Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch."
+            "``Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.``\n"
+            "``Vui lòng chọn loại giao dịch bên dưới để mở Ticket.``\n"
+            "``Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch.``"
         ),
         color=discord.Color.blue()
     )
@@ -1557,8 +1557,8 @@ async def verify(
     embed = discord.Embed(
         title="Verify • BirthdayTime",
         description=(
-            'Hãy bấm nút "Verify" để được xác minh.\n'
-            "Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn."
+            "``Hãy bấm nút "Verify" để được xác minh.\n``"
+            "``Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn.``"
         ),
         color=discord.Color.blue()
     )
