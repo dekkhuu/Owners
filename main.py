@@ -21,7 +21,7 @@ VERIFY_API_URL = os.getenv(
     "VERIFY_API_URL",
     "https://birthdaytime.shopaccvt.site/verification_api.php"
 )
-VERIFY_API_SECRET = os.getenv("VERIFY_API_SECRET", "")
+VERIFY_API_SECRET = os.getenv("VERIFY_API_SECRET") or TOKEN
 
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường DISCORD_TOKEN")
