@@ -1,18 +1,27 @@
 import os
 import json
+import asyncio
 import datetime
 import secrets
 import re
 import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 import discord
 from discord.ext import commands, tasks
 
 ALLOWED_GUILD_ID = 1503922700408586240
+VERIFY_ROLE_ID = 1515041455805304953
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 # Đường dẫn Discord OAuth2 Xác minh
-DISCORD_OAUTH_URL = "https://discord.com/oauth2/authorize?client_id=1551121062295502848&response_type=code&redirect_uri=https%3A%2F%2Fbirthdaytime.shopaccvt.site%2F&scope=identify"
+DISCORD_OAUTH_URL = "https://discord.com/oauth2/authorize?client_id=1551121062295502848&response_type=code&redirect_uri=https%3A%2F%2Fbirthdaytime.shopaccvt.site%2Foauth_callback.php&scope=identify"
+VERIFY_API_URL = os.getenv(
+    "VERIFY_API_URL",
+    "https://birthdaytime.shopaccvt.site/verification_api.php"
+)
+VERIFY_API_SECRET = os.getenv("VERIFY_API_SECRET", "")
 
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường DISCORD_TOKEN")
@@ -212,6 +221,151 @@ async def notify_and_mute(member: discord.Member, reason: str):
     return True
 
 
+def _verification_api_request(method: str = "GET", user_id: int | None = None):
+    if not VERIFY_API_SECRET:
+        raise RuntimeError("VERIFY_API_SECRET is not configured for the bot")
+
+    query = {"action": "pending"}
+    url = VERIFY_API_URL
+    if method == "GET" and user_id is not None:
+        query["user_id"] = str(user_id)
+    separator = "&" if "?" in url else "?"
+    url = f"{url}{separator}{urllib.parse.urlencode(query)}"
+    payload = None
+    if method == "POST":
+        payload = json.dumps({
+            "action": "acknowledge",
+            "user_id": str(user_id),
+        }).encode("utf-8")
+
+    request = urllib.request.Request(
+        url,
+        data=payload,
+        headers={
+            "X-Verify-Secret": VERIFY_API_SECRET,
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+
+    with urllib.request.urlopen(request, timeout=15) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def _publish_presence_batch(presences: list[dict]):
+    if not VERIFY_API_SECRET:
+        raise RuntimeError("VERIFY_API_SECRET is not configured for the bot")
+
+    payload = json.dumps({
+        "action": "presence_batch",
+        "presences": presences,
+    }).encode("utf-8")
+    request = urllib.request.Request(
+        VERIFY_API_URL,
+        data=payload,
+        headers={
+            "X-Verify-Secret": VERIFY_API_SECRET,
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def presence_payload(member: discord.Member) -> dict:
+    activities = []
+    for activity in member.activities[:10]:
+        name = getattr(activity, "name", None)
+        if not name:
+            continue
+        activities.append({
+            "name": str(name),
+            "details": str(getattr(activity, "details", "") or ""),
+            "state": str(getattr(activity, "state", "") or ""),
+            "type": int(activity.type.value),
+        })
+    return {
+        "user_id": str(member.id),
+        "status": member.status.name,
+        "activities": activities,
+    }
+
+
+async def publish_guild_presences(guild: discord.Guild):
+    if not VERIFY_API_SECRET:
+        return
+    members = list(guild.members)
+    for start in range(0, len(members), 500):
+        payload = [presence_payload(member) for member in members[start:start + 500]]
+        await asyncio.to_thread(_publish_presence_batch, payload)
+
+
+@bot.event
+async def on_presence_update(before: discord.Member, after: discord.Member):
+    if after.guild.id != ALLOWED_GUILD_ID or not VERIFY_API_SECRET:
+        return
+    try:
+        await asyncio.to_thread(_publish_presence_batch, [presence_payload(after)])
+    except Exception as exc:
+        print(f"Could not publish presence for {after.id}: {type(exc).__name__}: {exc}")
+
+
+async def approved_verification_ids(user_id: int | None = None) -> set[int]:
+    result = await asyncio.to_thread(_verification_api_request, "GET", user_id)
+    ids = result.get("user_ids")
+    if not isinstance(ids, list):
+        raise RuntimeError("Verification API returned an invalid user_ids list")
+    try:
+        return {int(value) for value in ids}
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Verification API returned an invalid Discord user ID") from exc
+
+
+async def process_approved_verification(user_id: int) -> bool:
+    guild = bot.get_guild(ALLOWED_GUILD_ID)
+    if guild is None:
+        raise RuntimeError("Verification guild is not available in the bot cache")
+
+    member = guild.get_member(user_id)
+    if member is None:
+        try:
+            member = await guild.fetch_member(user_id)
+        except discord.NotFound:
+            return False
+
+    role = guild.get_role(VERIFY_ROLE_ID)
+    if role is None:
+        raise RuntimeError("Verification role was not found in the guild")
+
+    if role not in member.roles:
+        await member.add_roles(role, reason="Website Discord OAuth verification")
+
+    await asyncio.to_thread(_verification_api_request, "POST", user_id)
+    print(f"Verification role granted to Discord user {user_id}.")
+    return True
+
+
+@tasks.loop(seconds=30)
+async def verification_queue_worker():
+    try:
+        user_ids = await approved_verification_ids()
+    except Exception as exc:
+        print(f"Verification queue API error: {type(exc).__name__}: {exc}")
+        return
+
+    for user_id in user_ids:
+        try:
+            await process_approved_verification(user_id)
+        except Exception as exc:
+            print(f"Could not process verification for {user_id}: {type(exc).__name__}: {exc}")
+
+
+@verification_queue_worker.before_loop
+async def before_verification_queue_worker():
+    await bot.wait_until_ready()
+
+
 @bot.event
 async def on_ready():
     for guild in bot.guilds:
@@ -233,6 +387,18 @@ async def on_ready():
 
     if not rule_scanner.is_running():
         rule_scanner.start()
+
+    if VERIFY_API_SECRET:
+        if not verification_queue_worker.is_running():
+            verification_queue_worker.start()
+        guild = bot.get_guild(ALLOWED_GUILD_ID)
+        if guild is not None:
+            try:
+                await publish_guild_presences(guild)
+            except Exception as exc:
+                print(f"Could not sync initial presence cache: {type(exc).__name__}: {exc}")
+    elif not VERIFY_API_SECRET:
+        print("VERIFY_API_SECRET is missing; automatic website verification is disabled.")
 
     print("=" * 40)
     print(f"Bot: {bot.user}")
@@ -1312,7 +1478,7 @@ class VerifyView(discord.ui.View):
         # Nút bấm dạng Link dẫn thẳng đến liên kết Discord OAuth2
         self.add_item(
             discord.ui.Button(
-                label="Verify",
+                label="Verify BirthdayTime",
                 style=discord.ButtonStyle.link,
                 url=DISCORD_OAUTH_URL,
                 emoji="<a:verify:1548178353859596320>"
@@ -1392,12 +1558,26 @@ async def on_member_join(member: discord.Member):
     if member.guild.id != ALLOWED_GUILD_ID:
         return
 
+    if VERIFY_API_SECRET:
+        try:
+            approved_ids = await approved_verification_ids(member.id)
+            if member.id in approved_ids:
+                await process_approved_verification(member.id)
+        except Exception as exc:
+            print(f"Could not verify joining member {member.id}: {type(exc).__name__}: {exc}")
+
+    verify_role = member.guild.get_role(VERIFY_ROLE_ID)
+    has_verify_role = verify_role is not None and verify_role in member.roles
     try:
         join_embed = discord.Embed(
             title="Chào mừng bạn đến server!",
             description=(
-                f"Bạn hãy vào kênh verify của **{member.guild.name}** để xác minh."
-                f"\n🔗 [Vào trang Verify]({DISCORD_OAUTH_URL})"
+                f"Xác minh BirthdayTime thành công. Bot đã cấp role verify cho bạn."
+                if has_verify_role
+                else (
+                    f"Bạn hãy xác minh tài khoản để nhận role tại **{member.guild.name}**."
+                    f"\n🔗 [Mở trang Verify]({DISCORD_OAUTH_URL})"
+                )
             ),
             color=discord.Color.blurple()
         )
@@ -1412,7 +1592,10 @@ async def on_member_join(member: discord.Member):
             )
         )
 
-        await member.send(embed=join_embed, view=view)
+        if has_verify_role:
+            await member.send(embed=join_embed)
+        else:
+            await member.send(embed=join_embed, view=view)
     except (discord.Forbidden, discord.HTTPException):
         pass
 
