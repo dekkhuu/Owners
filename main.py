@@ -1333,7 +1333,7 @@ async def ticket(
             "> Chào mừng bạn đến với hệ thống hỗ trợ của BirthdayTime.\n"
             "> Vui lòng chọn loại giao dịch bên dưới để mở Ticket.\n"
             "> Sau khi chọn, bạn sẽ được yêu cầu nhập thông tin giao dịch.\n"
-            "> Lưu ý hãy bấm 'Bảng giá' để xem giá thành mà trao đổi."
+            "> Lưu ý hãy bấm `Bảng giá` để xem giá thành mà trao đổi."
         ),
         color=discord.Color.blue()
     )
