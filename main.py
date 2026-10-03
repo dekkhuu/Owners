@@ -11,6 +11,9 @@ from discord.ext import commands, tasks
 ALLOWED_GUILD_ID = 1503922700408586240
 TOKEN = os.getenv("DISCORD_TOKEN")
 
+# Đường dẫn Discord OAuth2 Xác minh
+DISCORD_OAUTH_URL = "https://discord.com/oauth2/authorize?client_id=1551121062295502848&response_type=code&redirect_uri=https%3A%2F%2Fbirthdaytime.shopaccvt.site%2F&scope=identify"
+
 if not TOKEN:
     raise RuntimeError("Thiếu biến môi trường DISCORD_TOKEN")
 
@@ -32,12 +35,9 @@ GUILD = discord.Object(id=ALLOWED_GUILD_ID)
 # =========================
 AUTO_MUTE_SECONDS = 24 * 60 * 60
 
-# Số tin nhắn tối đa trong khoảng thời gian ngắn trước khi coi là spam.
 SPAM_MESSAGE_LIMIT = 3
 SPAM_WINDOW_SECONDS = 2
 
-# Các domain/link thường được dùng để quảng cáo, redirect hoặc link lạ.
-# Có thể bổ sung thêm domain vào danh sách này.
 BLOCKED_DOMAINS = {
     "grabify.link",
     "iplogger.org",
@@ -89,12 +89,6 @@ SUSPICIOUS_FILE_EXTENSIONS = {
     ".js", ".jar", ".ps1", ".hta", ".apk", ".dll", ".vn",
 }
 
-# Từ khóa thường xuất hiện trong tên file/URL NSFW.
-NSFW_KEYWORDS = {
-    "porn", "xxx", "nsfw", "sex", "nude", "nudity",
-    "hentai", "pornhub", "xvideos", "xnxx",
-}
-
 bot.spam_tracker = {}
 bot.muted_users = set()
 
@@ -107,14 +101,12 @@ def normalize_domain(url: str) -> str:
 
 
 def contains_blocked_link(content: str) -> tuple[bool, str]:
-    """Rule BirthdayTime: chỉ cho phép blazemarket.online trong nhóm link kiếm tiền."""
     urls = re.findall(r"(?:https?://|www\.)[^\s<>()]+", content.lower())
     lower = content.lower()
 
     for raw_url in urls:
         domain = normalize_domain(raw_url)
 
-        # Ngoại lệ duy nhất.
         if domain == "blazemarket.online" or domain.endswith(".blazemarket.online"):
             continue
 
@@ -127,7 +119,6 @@ def contains_blocked_link(content: str) -> tuple[bool, str]:
         if any(k in lower for k in MONEY_LINK_KEYWORDS):
             return True, "Gửi link kiếm tiền không được phép. Ngoại lệ duy nhất là blazemarket.online."
 
-        # Theo Rule, URL khác blazemarket.online đều bị chặn.
         return True, "Gửi website/link lạ không được phép."
 
     if any(k in lower for k in GAMBLING_KEYWORDS):
@@ -176,6 +167,7 @@ def contains_nsfw_attachment(message: discord.Message) -> tuple[bool, str]:
 
     return False, ""
 
+
 def is_spam(message: discord.Message) -> bool:
     now = time.monotonic()
     user_id = message.author.id
@@ -188,7 +180,6 @@ def is_spam(message: discord.Message) -> bool:
 
 
 async def notify_and_mute(member: discord.Member, reason: str):
-    """Mute 24h và DM embed riêng cho người vi phạm."""
     guild = member.guild
     until = discord.utils.utcnow() + datetime.timedelta(seconds=AUTO_MUTE_SECONDS)
 
@@ -217,10 +208,8 @@ async def notify_and_mute(member: discord.Member, reason: str):
     except (discord.Forbidden, discord.HTTPException):
         pass
 
-    # Reset bộ đếm spam sau khi bị xử lý.
     bot.spam_tracker.pop(member.id, None)
     return True
-
 
 
 @bot.event
@@ -316,7 +305,8 @@ async def help_command(interaction: discord.Interaction):
         value=(
             "`/start` — Tạo các kênh thống kê server\n"
             "`/birthday` — Thiết lập sinh nhật\n"
-            "`/boost` — Thiết lập thông báo Boost"
+            "`/boost` — Thiết lập thông báo Boost\n"
+            "`/verify` — Gửi bảng xác minh OAuth2"
         ),
         inline=False
     )
@@ -324,16 +314,13 @@ async def help_command(interaction: discord.Interaction):
     embed.set_footer(text="by ph.huyy.")
     await interaction.response.send_message(embed=embed)
 
-# =========================
-# Các lệnh quản lý
-# =========================
 
 @bot.command(name="ban")
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member, *, reason: str = "Không có lý do"):
     await member.ban(reason=reason)
     embed = discord.Embed(
-        description=f"{member.mention} đã bị đá khỏi Guid",
+        description=f"{member.mention} đã bị đá khỏi Guild",
         color=discord.Color.red()
     )
     await ctx.send(embed=embed, delete_after=30)
@@ -346,7 +333,7 @@ async def unban(ctx, user_id: int):
         user = await bot.fetch_user(user_id)
         await ctx.guild.unban(user)
         embed = discord.Embed(
-            description=f"{user.mention} đã được sự khoan hồng để trở lại Guid",
+            description=f"{user.mention} đã được sự khoan hồng để trở lại Guild",
             color=discord.Color.green()
         )
         await ctx.send(embed=embed, delete_after=30)
@@ -363,7 +350,7 @@ async def mute(ctx, member: discord.Member, minutes: int = 10, *, reason: str = 
         await ctx.send("❌ Số phút phải lớn hơn 0.", delete_after=30)
         return
 
-    duration = discord.utils.utcnow() + __import__("datetime").timedelta(minutes=minutes)
+    duration = discord.utils.utcnow() + datetime.timedelta(minutes=minutes)
     await member.timeout(duration, reason=reason)
     embed = discord.Embed(
         description=f"{member.mention} đã bị khoá mõm trong {minutes} phút",
@@ -385,7 +372,6 @@ async def unmute(ctx, member: discord.Member):
 
 @bot.command(name="av")
 async def avatar(ctx, member: discord.Member = None):
-    """Xem avatar của người được tag; nếu không tag ai thì xem avatar của mình."""
     member = member or ctx.author
 
     embed = discord.Embed(
@@ -400,8 +386,6 @@ async def avatar(ctx, member: discord.Member = None):
 
 @bot.command(name="afk")
 async def afk(ctx, *, reason: str = "AFK"):
-    # !afk [lý do] — không bắt buộc phải nhập member, tránh lỗi
-    # khi lý do bị Discord hiểu nhầm là tham số Member.
     target = ctx.author
     reason = reason.strip() or "AFK"
 
@@ -426,53 +410,42 @@ async def on_message(message):
     if message.author.bot:
         return
 
-    # Chỉ AutoMod trong server được phép của bot.
     if message.guild is not None and message.guild.id == ALLOWED_GUILD_ID:
-        # Không xử lý người đã bị timeout.
         if isinstance(message.author, discord.Member) and message.author.is_timed_out():
             return
 
         violation_reason = None
 
-        # 1) Spam tin nhắn.
         if is_spam(message):
             violation_reason = (
                 f"Gửi quá nhiều tin nhắn trong thời gian ngắn "
                 f"({SPAM_MESSAGE_LIMIT} tin / {SPAM_WINDOW_SECONDS} giây)."
             )
 
-        # 2) Link lạ/scam/tài xỉu/link kiếm tiền.
         if violation_reason is None:
             blocked, reason = contains_blocked_link(message.content)
             if blocked:
                 violation_reason = reason
 
-        # 3) Nội dung chữ bị cấm.
         if violation_reason is None:
             blocked, reason = contains_rule_violation_text(message.content)
             if blocked:
                 violation_reason = reason
 
-        # 4) File/ảnh/video có dấu hiệu vi phạm.
         if violation_reason is None:
             blocked, reason = contains_nsfw_attachment(message)
             if blocked:
                 violation_reason = reason
 
         if violation_reason:
-            # Tự động xóa ngay tin nhắn vi phạm.
-            deleted = False
             try:
                 await message.delete(reason=f"AutoMod: {violation_reason}")
-                deleted = True
             except (discord.Forbidden, discord.NotFound, discord.HTTPException):
                 pass
 
-            # Sau khi xử lý tin nhắn, mute người vi phạm 24 giờ.
             await notify_and_mute(message.author, violation_reason)
             return
 
-    # Nếu người gửi đang AFK và đã nhắn tin trở lại thì xóa trạng thái AFK.
     if hasattr(bot, "afk_users") and message.author.id in bot.afk_users:
         del bot.afk_users[message.author.id]
 
@@ -489,7 +462,6 @@ async def on_message(message):
         except discord.HTTPException:
             pass
 
-    # Khi ai đó ping một người đang AFK, thông báo trạng thái AFK.
     if hasattr(bot, "afk_users") and message.mentions:
         notified_users = set()
 
@@ -524,20 +496,12 @@ async def on_message(message):
     await bot.process_commands(message)
 
 
-# =========================
-# Slash commands thiết lập
-# =========================
-
-# =========================
-# BIRTHDAYTIME RULE SCANNER • QUÉT MỖI 1 GIÂY
-# =========================
 RULE_SCAN_INTERVAL = 5
 RULE_SCAN_MESSAGE_LIMIT = 10
 bot.rule_scan_seen = set()
 
 
 async def scan_message_for_rules(message: discord.Message):
-    """Kiểm tra một message theo Rule BirthdayTime và mute nếu vi phạm."""
     if message.author.bot:
         return
 
@@ -552,22 +516,16 @@ async def scan_message_for_rules(message: discord.Message):
 
     violation_reason = None
 
-    # Không kiểm tra spam ở scanner. on_message đã kiểm tra spam ngay khi tin nhắn tới.
-    # Nếu kiểm tra lại ở đây, cùng một message sẽ bị tính 2 lần và có thể mute nhầm.
-
-    # Link.
     if violation_reason is None:
         blocked, reason = contains_blocked_link(message.content)
         if blocked:
             violation_reason = reason
 
-    # Nội dung chữ.
     if violation_reason is None:
         blocked, reason = contains_rule_violation_text(message.content)
         if blocked:
             violation_reason = reason
 
-    # File/ảnh/video dựa trên tên file.
     if violation_reason is None:
         blocked, reason = contains_nsfw_attachment(message)
         if blocked:
@@ -584,13 +542,11 @@ async def scan_message_for_rules(message: discord.Message):
 
 @tasks.loop(seconds=RULE_SCAN_INTERVAL)
 async def rule_scanner():
-    """Mỗi 1 giây quét các message gần nhất trong các kênh text."""
     for guild in bot.guilds:
         if guild.id != ALLOWED_GUILD_ID:
             continue
 
         for channel in guild.text_channels:
-            # Chỉ quét các kênh bot có thể đọc lịch sử.
             try:
                 messages = [m async for m in channel.history(
                     limit=RULE_SCAN_MESSAGE_LIMIT
@@ -599,14 +555,12 @@ async def rule_scanner():
                 continue
 
             for message in reversed(messages):
-                # Không quét lại cùng một message.
                 if message.id in bot.rule_scan_seen:
                     continue
 
                 bot.rule_scan_seen.add(message.id)
                 await scan_message_for_rules(message)
 
-    # Giới hạn bộ nhớ ID đã quét.
     if len(bot.rule_scan_seen) > 10000:
         bot.rule_scan_seen = set(list(bot.rule_scan_seen)[-5000:])
 
@@ -615,13 +569,9 @@ async def rule_scanner():
 async def before_rule_scanner():
     await bot.wait_until_ready()
 
-# =========================
-# Thống kê server
-# =========================
 
 bot.stats_channels = {}
 
-# Chuyển chữ số thường sang chữ số kiểu đặc biệt cho tên kênh thống kê.
 _DIGIT_MAP = str.maketrans("0123456789", "𝟎𝟏𝟐𝟑𝟒𝟓𝟔𝟕𝟖𝟗")
 
 def format_stats_digits(text: str) -> str:
@@ -631,8 +581,6 @@ def format_stats_digits(text: str) -> str:
 async def update_server_stats(guild: discord.Guild):
     channel_map = bot.stats_channels.get(guild.id, {})
 
-    # Sau khi bot khởi động lại, tự tìm các kênh thống kê hiện có
-    # theo phần tên gốc, không tạo lại kênh và không đổi kiểu tên.
     if not channel_map:
         base_names = [
             "╭ㆍ🍁ㆍ☆ㆍ﹕𝐀𝐥𝐥",
@@ -679,7 +627,6 @@ async def update_server_stats(guild: discord.Guild):
         if channel is None:
             continue
 
-        # Giữ nguyên toàn bộ kiểu tên kênh, chỉ thay phần số ở cuối.
         new_name = f"{base_name} ﹕{format_stats_digits(str(values[base_name]))}"
         if channel.name != new_name:
             try:
@@ -690,8 +637,6 @@ async def update_server_stats(guild: discord.Guild):
 
 @tasks.loop(seconds=60)
 async def stats_updater():
-    # Mỗi 1 phút quét toàn bộ server được phép để tìm và cập nhật
-    # tất cả 5 kênh thống kê, kể cả sau khi bot khởi động lại.
     for guild in bot.guilds:
         if guild.id == ALLOWED_GUILD_ID:
             await update_server_stats(guild)
@@ -749,8 +694,6 @@ async def start(interaction: discord.Interaction):
                 reason=f"Setup server stats by {interaction.user}"
             )
 
-        # Không cho @everyone kết nối vào các kênh thống kê.
-        # Thành viên có Administrator vẫn có thể bỏ qua channel overwrite.
         await channel.set_permissions(
             guild.default_role,
             connect=False,
@@ -758,7 +701,6 @@ async def start(interaction: discord.Interaction):
         )
         created.append(channel)
 
-    # Lưu các kênh để task cập nhật mỗi phút.
     bot.stats_channels[guild.id] = {channel_names[i]: created[i].id for i in range(5)}
 
     await update_server_stats(guild)
@@ -878,7 +820,6 @@ class BirthdayModal(discord.ui.Modal, title="Đăng ký sinh nhật"):
         }
         save_birthdays(data)
 
-        # Chỉ phản hồi riêng tư; không gửi ngày sinh ra kênh công khai.
         await interaction.response.send_message(
             "✅ Đăng ký sinh nhật thành công! Thông tin của bạn được giữ riêng tư.",
             ephemeral=True
@@ -1362,158 +1303,21 @@ async def setup_hook():
 
 
 # =========================
-# VERIFY • BirthdayTime
+# VERIFY • BirthdayTime (LINK OAUTH2)
 # =========================
-
-VERIFY_ROLE_ID = 1515041455805304953
-VERIFY_EMOJI = "<a:verify:1548178353859596320>"
-FAILED_EMOJI = "<a:failed:1548973085741547580>"
-
-# Lưu code đang có hiệu lực theo từng user.
-# Khi mở Modal mới, code cũ của user sẽ bị thay bằng code mới.
-bot.verify_codes = {}
-
-
-def generate_verify_code() -> str:
-    # 6 chữ số, dùng secrets để tạo mã khó đoán.
-    return f"{secrets.randbelow(1_000_000):06d}"
-
-
 
 class VerifyView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-
-    @discord.ui.button(
-        label="Verify",
-        style=discord.ButtonStyle.success,
-        custom_id="birthdaytime_verify_button"
-    )
-    async def verify(
-        self,
-        interaction: discord.Interaction,
-        button: discord.ui.Button
-    ):
-        # Đã có role Verify thì đã xác minh rồi, không cho xác minh lại.
-        guild = interaction.guild
-        if guild is None:
-            await interaction.response.send_message(
-                "❌ Lệnh này chỉ dùng trong server.",
-                ephemeral=True
+        # Nút bấm dạng Link dẫn thẳng đến liên kết Discord OAuth2
+        self.add_item(
+            discord.ui.Button(
+                label="Verify",
+                style=discord.ButtonStyle.link,
+                url=DISCORD_OAUTH_URL,
+                emoji="<a:verify:1548178353859596320>"
             )
-            return
-
-        role = guild.get_role(VERIFY_ROLE_ID)
-        if role is None:
-            await interaction.response.send_message(
-                "❌ Không tìm thấy role xác minh. Hãy kiểm tra ID role.",
-                ephemeral=True
-            )
-            return
-
-        if role in interaction.user.roles:
-            await interaction.response.send_message(
-                f"{VERIFY_EMOJI} Bạn đã xác minh trước đó rồi, không thể xác minh lại.",
-                ephemeral=True
-            )
-            return
-
-        # Chỉ người chưa xác minh mới được tạo code.
-        code = generate_verify_code()
-        bot.verify_codes[interaction.user.id] = code
-
-        # Code chỉ hiển thị trong Modal/ephemeral, không gửi công khai.
-        # Người dùng cần nhập đúng code được hiển thị trên bảng.
-        class UserCodeModal(discord.ui.Modal, title="Verify • BirthdayTime"):
-            code_input = discord.ui.TextInput(
-                label=f"Code của bạn: {code}",
-                placeholder="Nhập code trên bảng",
-                min_length=6,
-                max_length=6,
-                required=True
-            )
-
-            async def on_submit(self, modal_interaction: discord.Interaction):
-                expected = bot.verify_codes.get(modal_interaction.user.id)
-                entered = str(self.code_input.value).strip()
-
-                if expected is None or entered != expected:
-                    await modal_interaction.response.send_message(
-                        f"{FAILED_EMOJI}Bạn chưa nhập đúng code trên bảng",
-                        ephemeral=True
-                    )
-                    return
-
-                guild = modal_interaction.guild
-                if guild is None:
-                    await modal_interaction.response.send_message(
-                        "❌ Lệnh này chỉ dùng trong server.",
-                        ephemeral=True
-                    )
-                    return
-
-                role = guild.get_role(VERIFY_ROLE_ID)
-                if role is None:
-                    await modal_interaction.response.send_message(
-                        "❌ Không tìm thấy role xác minh. Hãy kiểm tra ID role.",
-                        ephemeral=True
-                    )
-                    return
-
-                # Kiểm tra lại ngay trước khi cấp role để tránh xác minh lần 2.
-                if role in modal_interaction.user.roles:
-                    bot.verify_codes.pop(modal_interaction.user.id, None)
-                    await modal_interaction.response.send_message(
-                        f"{VERIFY_EMOJI} Bạn đã xác minh trước đó rồi, không thể xác minh lại.",
-                        ephemeral=True
-                    )
-                    return
-
-                try:
-                    if role not in modal_interaction.user.roles:
-                        await modal_interaction.user.add_roles(
-                            role,
-                            reason="BirthdayTime verification"
-                        )
-                except discord.Forbidden:
-                    await modal_interaction.response.send_message(
-                        "❌ Bot không có quyền cấp role xác minh. "
-                        "Hãy kéo role bot cao hơn role xác minh.",
-                        ephemeral=True
-                    )
-                    return
-                except discord.HTTPException:
-                    await modal_interaction.response.send_message(
-                        "❌ Không thể cấp role xác minh lúc này.",
-                        ephemeral=True
-                    )
-                    return
-
-                bot.verify_codes.pop(modal_interaction.user.id, None)
-
-                # Thông báo xác minh thành công trong server.
-                await modal_interaction.response.send_message(
-                    f"{VERIFY_EMOJI}Bạn đã xác minh thành công",
-                    ephemeral=True
-                )
-
-                # Gửi riêng cho người dùng một Embed sau khi xác minh thành công.
-                try:
-                    success_embed = discord.Embed(
-                        title="Chúc mừng bạn đã xác minh thành công",
-                        description=(
-                            f"Chúc mừng bạn đã xác minh thành công của Guid {guild.name}.\n"
-                            f"Hãy vào Server để nói chuyện cùng mọi người nhé!"
-                        ),
-                        color=discord.Color.green()
-                    )
-                    success_embed.set_footer(text="by ph.huyy.")
-                    await modal_interaction.user.send(embed=success_embed)
-                except (discord.Forbidden, discord.HTTPException):
-                    # Người dùng có thể đã tắt DM hoặc Discord đang lỗi tạm thời.
-                    pass
-
-        await interaction.response.send_modal(UserCodeModal())
+        )
 
 
 @bot.tree.command(
@@ -1554,8 +1358,8 @@ async def verify(
     embed = discord.Embed(
         title="Verify • BirthdayTime",
         description=(
-            "> Hãy bấm nút `Verify` để được xác minh.\n"
-            "> Sau khi bấm, hãy nhập đúng mã xác minh được cung cấp cho bạn."
+            "> Bấm vào nút **Verify** bên dưới để chuyển hướng đến trang xác minh OAuth2.\n"
+            "> Sau khi xác minh thành công, bạn sẽ nhận được quyền truy cập server."
         ),
         color=discord.Color.blue()
     )
@@ -1585,36 +1389,31 @@ async def verify(
 
 @bot.event
 async def on_member_join(member: discord.Member):
-    # Chỉ gửi DM cho thành viên mới trong server được phép.
     if member.guild.id != ALLOWED_GUILD_ID:
         return
-
-    VERIFY_LINK = "https://discord.gg/Nvmh4D7VCX"
 
     try:
         join_embed = discord.Embed(
             title="Chào mừng bạn đến server!",
             description=(
                 f"Bạn hãy vào kênh verify của **{member.guild.name}** để xác minh."
-                f"🔗 [Vào kênh Verify]({VERIFY_LINK})"
+                f"\n🔗 [Vào trang Verify]({DISCORD_OAUTH_URL})"
             ),
             color=discord.Color.blurple()
         )
         join_embed.set_footer(text="by ph.huyy.")
 
-        # Nút bấm mở trực tiếp link Verify.
         view = discord.ui.View()
         view.add_item(
             discord.ui.Button(
                 label="Vào Verify",
                 style=discord.ButtonStyle.link,
-                url=VERIFY_LINK
+                url=DISCORD_OAUTH_URL
             )
         )
 
         await member.send(embed=join_embed, view=view)
     except (discord.Forbidden, discord.HTTPException):
-        # Người dùng có thể đã tắt DM.
         pass
 
 
